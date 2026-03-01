@@ -10,18 +10,18 @@ const int ANIMATION_POSITIONS_PER_TICK = 1;
 
 class GraphObject
 {
-  public:
+public:
 
-    static const int none = -1;
+	static const int none = -1;
 	static const int right = 0;
 	static const int left = 180;
 	static const int up = 90;
 	static const int down = 270;
 
 	GraphObject(int imageID, Coord startCoord, int dir = right, double size = DEFAULT_SPRITE_SCALE)
-	 : m_imageID(imageID), m_visible(true), m_x(startCoord.x), m_y(startCoord.y),
-	   m_destX(startCoord.x), m_destY(startCoord.y), m_brightness(1.0),
-	   m_animationNumber(0), m_direction(dir), m_size(size)
+		: m_imageID(imageID), m_visible(true), m_x(startCoord.x), m_y(startCoord.y),
+		m_destX(startCoord.x), m_destY(startCoord.y), m_brightness(1.0),
+		m_animationNumber(0), m_direction(dir), m_size(size)
 	{
 		if (m_size <= 0)
 			m_size = 1;
@@ -47,7 +47,7 @@ class GraphObject
 
 	Coord getCoord() const
 	{
-		  // If already moved but not yet animated, use new location anyway.
+		// If already moved but not yet animated, use new location anyway.
 		int x = static_cast<int>(m_destX);
 		int y = static_cast<int>(m_destY);
 		return Coord(x, y);
@@ -62,21 +62,21 @@ class GraphObject
 	{
 		Coord target = base;
 		switch (dir) {
-			case right: // East
-				target.x += 1;
-				break;
-			case left: // West
-				target.x -= 1;
-				break;
-			case up: // North
-				target.y += 1;
-				break;
-			case down: // South
-				target.y -= 1;
-				break;
-			default:
-				// Invalid direction, return base coord
-				break;
+		case right: // East
+			target.x += 1;
+			break;
+		case left: // West
+			target.x -= 1;
+			break;
+		case up: // North
+			target.y += 1;
+			break;
+		case down: // South
+			target.y -= 1;
+			break;
+		default:
+			// Invalid direction, return base coord
+			break;
 		}
 		return target;
 	}
@@ -92,20 +92,20 @@ class GraphObject
 	{
 		Coord current = getCoord();
 		switch (direction) {
-			case right: // East
-				current.x += 1;
-				break;
-			case left: // West
-				current.x -= 1;
-				break;
-			case up: // North
-				current.y += 1;
-				break;
-			case down: // South
-				current.y -= 1;
-				break;
-			default:
-				return; // Invalid direction
+		case right: // East
+			current.x += 1;
+			break;
+		case left: // West
+			current.x -= 1;
+			break;
+		case up: // North
+			current.y += 1;
+			break;
+		case down: // South
+			current.y -= 1;
+			break;
+		default:
+			return; // Invalid direction
 		}
 		moveTo(current);
 	}
@@ -118,15 +118,14 @@ class GraphObject
 		int x = static_cast<int>(newX);
 		int y = static_cast<int>(newY);
 		moveTo(Coord(x, y));
-		increaseAnimationNumber();
 	}
 
-	virtual void getPositionInThisDirection(int angle, int units, double &dx, double &dy)
+	virtual void getPositionInThisDirection(int angle, int units, double& dx, double& dy)
 	{
 		static const double PI = 4 * atan(1.0);
 		Coord coord = getCoord();
-		dx = (coord.x + units * cos(angle*1.0 / 360 * 2 * PI));
-		dy = (coord.y + units * sin(angle*1.0 / 360 * 2 * PI));
+		dx = (coord.x + units * cos(angle * 1.0 / 360 * 2 * PI));
+		dy = (coord.y + units * sin(angle * 1.0 / 360 * 2 * PI));
 	}
 
 	void moveForward(int units = 1)
@@ -160,20 +159,26 @@ class GraphObject
 
 	double getRadius() const
 	{
-		const int kRaidusPerUnit = 8;
-		return kRaidusPerUnit * m_size;
+		const int kRadiusPerUnit = 8;
+		return kRadiusPerUnit * m_size;
 	}
 
-	  // The following should be used by only the framework, not the student
-
-	bool isVisible() const
+private:
+	friend class GameController;
+	int getID() const
 	{
-		return m_visible;
+		return m_imageID;
 	}
 
-	double getBrightness() const
+	static std::set<GraphObject*>& getGraphObjects()
 	{
-		return m_brightness;
+		static std::set<GraphObject*> graphObjects;
+		return graphObjects;
+	}
+
+	void increaseAnimationNumber()
+	{
+		m_animationNumber++;
 	}
 
 	int getAnimationNumber() const
@@ -193,27 +198,18 @@ class GraphObject
 		m_y = m_destY;
 	}
 
-	static std::set<GraphObject*>& getGraphObjects()
+	bool isVisible() const
 	{
-		static std::set<GraphObject*> graphObjects;
-		return graphObjects;
+		return m_visible;
 	}
 
-	void increaseAnimationNumber()
+	double getBrightness() const
 	{
-		m_animationNumber++;
+		return m_brightness;
 	}
-
 
 private:
-	friend class GameController;
-	int getID() const
-	{
-		return m_imageID;
-	}
-
-  private:
-	  // Prevent copying or assigning GraphObjects
+	// Prevent copying or assigning GraphObjects
 	GraphObject(const GraphObject&);
 	GraphObject& operator=(const GraphObject&);
 

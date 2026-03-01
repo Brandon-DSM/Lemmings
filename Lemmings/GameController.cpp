@@ -11,9 +11,9 @@
 #include <utility>
 #include <cstdlib>
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 #include <memory>
-#include <array>
 using namespace std;
 
 const int MS_PER_FRAME = 16; // ~60 FPS
@@ -23,6 +23,7 @@ struct SpriteInfo
     int imageID;
     int frameNum;
     std::string fileName;
+    std::string imageName;
 };
 
 enum GameController::GameControllerState : int {
@@ -32,30 +33,30 @@ enum GameController::GameControllerState : int {
 void GameController::initSpritesAndDepth()
 {
     SpriteInfo drawers[] = {
-        { IID_PLAYER, 0, "mario1.png" },
-        { IID_LEMMING_FACTORY, 0, "factory.png" },
-        { IID_LEMMING_FACTORY, 1, "factory.png" },
-        { IID_LEMMING_FACTORY, 2, "factory.png" },
-        { IID_FIREBALL, 0, "fire1.png" },
-        { IID_ICE_MONSTER, 0, "yeti1.png" },
-        { IID_ICE_MONSTER, 1, "yeti2.png" },
-        { IID_ICE_MONSTER, 2, "yeti3.png" },
-        { IID_ICE_MONSTER, 3, "yeti4.png" },
-        { IID_FLOOR, 0, "wall.png" },
-        { IID_TRAMPOLINE, 0, "trampoline.png" },
-        { IID_BONFIRE, 0, "bonfire1.png" },
-        { IID_BONFIRE, 1, "bonfire2.png" },
-        { IID_NET, 0, "net.png" },
-        { IID_LEMMING, 0, "lemming1.tga" },
-        { IID_LEMMING, 1, "lemming1.tga" },
-        { IID_LEMMING, 2, "lemming1.tga" },
-        { IID_LEMMING, 3, "lemming2.tga" },
-        { IID_LEMMING, 4, "lemming2.tga" },
-        { IID_ONE_WAY_DOOR, 0, "right_door.png" },
-        { IID_EXIT, 0, "exit.png" },
-        { IID_PHEROMONE, 0, "pheromone.png" },
-        { IID_SPRING, 0, "spring.png" },
-        { IID_DEMO_OBJECT, 0, "valentine.png" }, // only for demo, not the game
+        { IID_PLAYER, 0, "mario1.png", "PLAYER" },
+        { IID_LEMMING_FACTORY, 0, "factory.png", "LEMMING_FACTORY" },
+        { IID_LEMMING_FACTORY, 1, "factory.png", "LEMMING_FACTORY" },
+        { IID_LEMMING_FACTORY, 2, "factory.png", "LEMMING_FACTORY" },
+        { IID_FIREBALL, 0, "fire1.png", "FIREBALL" },
+        { IID_ICE_MONSTER, 0, "yeti1.png", "ICE_MONSTER" },
+        { IID_ICE_MONSTER, 1, "yeti2.png", "ICE_MONSTER" },
+        { IID_ICE_MONSTER, 2, "yeti3.png", "ICE_MONSTER" },
+        { IID_ICE_MONSTER, 3, "yeti4.png", "ICE_MONSTER" },
+        { IID_FLOOR, 0, "wall.png", "FLOOR" },
+        { IID_TRAMPOLINE, 0, "trampoline.png", "TRAMPOLINE" },
+        { IID_BONFIRE, 0, "bonfire1.png", "BONFIRE" },
+        { IID_BONFIRE, 1, "bonfire2.png", "BONFIRE" },
+        { IID_NET, 0, "net.png", "NET" },
+        { IID_LEMMING, 0, "lemming1.tga", "LEMMING" },
+        { IID_LEMMING, 1, "lemming1.tga", "LEMMING" },
+        { IID_LEMMING, 2, "lemming1.tga", "LEMMING" },
+        { IID_LEMMING, 3, "lemming2.tga", "LEMMING" },
+        { IID_LEMMING, 4, "lemming2.tga", "LEMMING" },
+        { IID_ONE_WAY_DOOR, 0, "right_door.png", "ONE_WAY_DOOR" },
+        { IID_EXIT, 0, "exit.png", "EXIT" },
+        { IID_PHEROMONE, 0, "pheromone.png", "PHEROMONE" },
+        { IID_SPRING, 0, "spring.png", "SPRING" },
+        { IID_DEMO_OBJECT, 0, "valentine.png", "DEMO_OBJECT" }, // only for demo, not the game
     };
 
     // Configure sprite depths for rendering order (higher depth = background)
@@ -74,6 +75,12 @@ void GameController::initSpritesAndDepth()
     m_spriteDepth[IID_SPRING] = 1;
     m_spriteDepth[IID_DEMO_OBJECT] = 0;  // only for demo, not the game
 
+    // Intended only for stationary objects with multiple frames, since moving
+    // objects advance frame when they move
+    m_frameAdvanceInterval[IID_BONFIRE] = 15;  // small number flickers too fast
+    m_frameAdvanceInterval[IID_LEMMING_FACTORY] = 1;  // leftover from earlier?
+    m_frameAdvanceInterval[IID_EXIT] = 1;             // leftover from earlier?
+
     // Load sprite textures
     string assetPath = m_gw->assetPath();
     if (!assetPath.empty() && assetPath.back() != '/')
@@ -87,10 +94,11 @@ void GameController::initSpritesAndDepth()
         {
             // Enable texture smoothing to reduce flickering
             texture.setSmooth(true);
-            
+
             // Create a unique key for each frame
             int key = drawer.imageID * TEXTURE_KEY_MULTIPLIER + drawer.frameNum;
             m_textures[key] = std::move(texture);
+            m_imageNameMap[drawer.imageID] = drawer.imageName;
         }
         else
         {
@@ -135,35 +143,35 @@ void GameController::initSoundSystem()
 void GameController::initFontSystem()
 {
     bool fontLoaded = false;
-    
-	string fontPaths[] = {
-    // Try monospace (fixed-width) fonts first for better stat text display
-	      // macOS monospace fonts
-    	"/System/Library/Fonts/Courier.ttc",
-    	"/System/Library/Fonts/Supplemental/Courier New.ttf",
-    	"/System/Library/Fonts/Monaco.ttf",
-    	"/System/Library/Fonts/Menlo.ttc",
-	      // Windows monospace fonts
-		"C:/Windows/Fonts/cour.ttf",
-		"C:/Windows/Fonts/consola.ttf",
-		"C:/Windows/Fonts/lucon.ttf",
-	      // Linux monospace fonts
-    	"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-    	"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-	      // Fallback to any available system fonts
-    	"/System/Library/Fonts/Helvetica.ttc",
-    	"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-	};
 
-	for (const auto& fontPath : fontPaths)
-	{
-		if (m_font.openFromFile(fontPath))
-		{
-			fontLoaded = true;
-			break;
-		}
-	}
-    
+    string fontPaths[] = {
+        // Try monospace (fixed-width) fonts first for better stat text display
+              // macOS monospace fonts
+            "/System/Library/Fonts/Courier.ttc",
+            "/System/Library/Fonts/Supplemental/Courier New.ttf",
+            "/System/Library/Fonts/Monaco.ttf",
+            "/System/Library/Fonts/Menlo.ttc",
+            // Windows monospace fonts
+          "C:/Windows/Fonts/cour.ttf",
+          "C:/Windows/Fonts/consola.ttf",
+          "C:/Windows/Fonts/lucon.ttf",
+          // Linux monospace fonts
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        // Fallback to any available system fonts
+      "/System/Library/Fonts/Helvetica.ttc",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    };
+
+    for (const auto& fontPath : fontPaths)
+    {
+        if (filesystem::exists(fontPath) && m_font.openFromFile(fontPath))
+        {
+            fontLoaded = true;
+            break;
+        }
+    }
+
     if (!fontLoaded)
     {
         cout << "Warning: Could not load font. Text may not display correctly." << endl;
@@ -180,24 +188,25 @@ void GameController::initDrawersAndSounds()
 bool GameController::passesThruWhenSingleStepping(int key) const
 {
     static set<int> passThruKeys = {
-		'T', 'N', 'P', 'S', 't', 'n', 'p', 's', '<', '>', KEY_PRESS_LEFT,
-		KEY_PRESS_RIGHT, KEY_PRESS_UP, KEY_PRESS_DOWN,
+        'T', 'N', 'P', 'S', 't', 'n', 'p', 's', '<', '>', KEY_PRESS_LEFT,
+        KEY_PRESS_RIGHT, KEY_PRESS_UP, KEY_PRESS_DOWN,
     };
     return passThruKeys.find(key) != passThruKeys.end();
 }
 
-void GameController::run(int /* argc */, char* /* argv */ [], GameWorld* gw, string windowTitle)
+void GameController::run(int /* argc */, char* /* argv */[], GameWorld* gw, string windowTitle)
 {
     gw->setController(this);
     m_gw = gw;
     setGameState(welcome);
     m_lastKeyHit = INVALID_KEY;
     m_singleStep = false;
-	m_shouldStopSound = false;
+    m_shouldStopSound = false;
     m_curIntraFrameTick = 0;
+    m_totalFramesDisplayed = 0;
     m_playerWon = false;
-	m_postInitPreCleanup = false;
-	m_giveUpLevel = false;
+    m_postInitPreCleanup = false;
+    m_giveUpLevel = false;
 
     // Create SFML window
     m_window.create(sf::VideoMode(sf::Vector2u(WINDOW_WIDTH, WINDOW_HEIGHT)), windowTitle);
@@ -242,6 +251,7 @@ void GameController::run(int /* argc */, char* /* argv */ [], GameWorld* gw, str
     }
 
     delete m_gw;
+    reportLeakedGraphObjects();
 }
 
 void GameController::handleEvents()
@@ -256,11 +266,13 @@ void GameController::handleEvents()
         {
             int key = convertSFMLKeyToGameKey(keyPressed->code);
             m_lastKeyHit = key;
-            
+
             // Handle quit key immediately in all game states
             if (key == 'q')
             {
                 // Use exit() to bypass SFML cleanup issues
+                delete m_gw;
+                reportLeakedGraphObjects();
                 std::exit(0);
             }
         }
@@ -271,14 +283,14 @@ void GameController::handleEvents()
             // This avoids interfering with special keys handled by KeyPressed
             if (textEntered->unicode >= 32 && textEntered->unicode < 128)
             {
-				int key = static_cast<int>(textEntered->unicode);
-				switch (key)
-				{
-				  case 'f': m_singleStep = true;   break;
-				  case 'r': m_singleStep = false;  break;
-				  case 'g': m_giveUpLevel = true;  break;
-				  default:  m_lastKeyHit = key;    break;
-				}
+                int key = static_cast<int>(textEntered->unicode);
+                switch (key)
+                {
+                case 'f': m_singleStep = true;   break;
+                case 'r': m_singleStep = false;  break;
+                case 'g': m_giveUpLevel = true;  break;
+                default:  m_lastKeyHit = key;    break;
+                }
             }
         }
     }
@@ -308,7 +320,7 @@ void GameController::playSound(int soundID)
 
     auto bufferIt = m_soundBuffers.find(soundID);
     if (bufferIt == m_soundBuffers.end())
-		return;
+        return;
 
     // Clean up finished sounds first
     m_activeSounds.erase(
@@ -318,7 +330,7 @@ void GameController::playSound(int soundID)
             }),
         m_activeSounds.end()
     );
-        
+
     // Create a new sound with the buffer and add to active sounds
     auto sound = std::make_unique<sf::Sound>(bufferIt->second);
     sound->play();
@@ -344,19 +356,21 @@ void GameController::setGameState(GameControllerState s)
 [[noreturn]] void GameController::quitGame()
 {
     // Stop and clear all active sounds to prevent mutex issues
-	stopSounds();
-    
+    stopSounds();
+
     // Clear sound buffers to prevent mutex issues
     m_soundBuffers.clear();
-    
+
     setGameState(quit);
     m_window.close();
     if (m_postInitPreCleanup)  // might be false if aborted game
     {
-		m_gw->cleanUp();
+        m_gw->cleanUp();
         m_postInitPreCleanup = false;
     }
     // Explicitly exit to ensure program terminates properly
+    delete m_gw;
+    reportLeakedGraphObjects();
     std::exit(0);
 }
 
@@ -372,7 +386,7 @@ void GameController::doSomething()
         m_secondMessage = "Press Enter to begin play...";
         setGameState(prompt);
         m_nextStateAfterPrompt = init;
-		m_shouldStopSound = true;
+        m_shouldStopSound = true;
         break;
     case contgame:
         m_mainMessage = "You lost a life!";
@@ -384,13 +398,13 @@ void GameController::doSomething()
         m_curIntraFrameTick = ANIMATION_POSITIONS_PER_TICK;
         m_nextStateAfterAnimate = not_applicable;
         if (m_giveUpLevel) {
-		    m_giveUpLevel = false;
+            m_giveUpLevel = false;
             // Player gave up - treat as death
             m_gw->decLives();
             m_nextStateAfterAnimate = (m_gw->isGameOver() ? gameover : contgame);
         }
         else
-        { 
+        {
             int status = m_gw->move();
             if (status == GWSTATUS_PLAYER_DIED)
             {
@@ -420,76 +434,78 @@ void GameController::doSomething()
             {
                 int key;
                 if (getKeyIfAny(key))
-				{
-					if (passesThruWhenSingleStepping(key))
-						putBackKey(key);
+                {
+                    if (passesThruWhenSingleStepping(key))
+                        putBackKey(key);
                     setGameState(makemove);
-				}
+                }
             }
         }
         break;
     case gameover:
-        {
-            ostringstream oss;
-            oss << (m_playerWon ? "You won the game!" : "Game Over!")
-                << " Final score: " << m_gw->getScore() << "!";
-            m_mainMessage = oss.str();
-        }
-        m_secondMessage = "Press Enter to quit...";
-        setGameState(prompt);
-        m_nextStateAfterPrompt = quit;
-        break;
+    {
+        ostringstream oss;
+        oss << (m_playerWon ? "You won the game!" : "Game Over!")
+            << " Final score: " << m_gw->getScore() << "!";
+        m_mainMessage = oss.str();
+    }
+    m_secondMessage = "Press Enter to quit...";
+    setGameState(prompt);
+    m_nextStateAfterPrompt = quit;
+    break;
     case prompt:
+    {
+        int key;
+        if (getKeyIfAny(key) && key == '\r')
         {
-            int key;
-            if (getKeyIfAny(key) && key == '\r')
-			{
-                setGameState(m_nextStateAfterPrompt);
-				if (m_shouldStopSound)
-				{
-					stopSounds();
-					m_shouldStopSound = false;
-				}
-			}
+            setGameState(m_nextStateAfterPrompt);
+            if (m_shouldStopSound)
+            {
+                stopSounds();
+                m_shouldStopSound = false;
+            }
         }
-        break;
+    }
+    break;
     case init:
+    {
+        int status = m_gw->init();
+        m_postInitPreCleanup = true;
+        // Stop all sounds (note: individual sounds are managed differently now)
+        // In SFML 3.0, we'd need a different approach to stop all sounds
+
+        if (status == GWSTATUS_PLAYER_WON)
         {
-            int status = m_gw->init();
-			m_postInitPreCleanup = true;
-            // Stop all sounds (note: individual sounds are managed differently now)
-            // In SFML 3.0, we'd need a different approach to stop all sounds
-            
-            if (status == GWSTATUS_PLAYER_WON)
-            {
-                m_playerWon = true;
-                setGameState(gameover);
-            }
-            else if (status == GWSTATUS_LEVEL_ERROR)
-            {
-                m_mainMessage = "Level error: " + m_gw->getErrorMessage();
-                m_secondMessage = "Press Enter to quit...";
-                setGameState(prompt);
-                m_nextStateAfterPrompt = quit;
-            }
-            else
-                setGameState(makemove);
+            m_playerWon = true;
+            setGameState(gameover);
         }
-        break;
+        else if (status == GWSTATUS_LEVEL_ERROR)
+        {
+            m_mainMessage = "Level error: " + m_gw->getErrorMessage();
+            m_secondMessage = "Press Enter to quit...";
+            setGameState(prompt);
+            m_nextStateAfterPrompt = quit;
+        }
+        else
+            setGameState(makemove);
+    }
+    break;
     case cleanup:
         if (m_postInitPreCleanup)  // should aways be true here
         {
-			m_gw->cleanUp();
+            m_gw->cleanUp();
             m_postInitPreCleanup = false;
         }
         setGameState(init);
         break;
     case quit:
         // Stop all sounds and clear resources to prevent mutex issues
-		stopSounds();
+        stopSounds();
         m_soundBuffers.clear();
         m_window.close();
         // Explicitly exit to ensure program terminates properly
+        delete m_gw;
+        reportLeakedGraphObjects();
         std::exit(0);
         break;
     }
@@ -497,6 +513,7 @@ void GameController::doSomething()
 
 void GameController::displayGamePlay()
 {
+    m_totalFramesDisplayed++;
     std::set<GraphObject*>& graphObjects = GraphObject::getGraphObjects();
 
     // Convert game coordinates to screen coordinates
@@ -508,70 +525,70 @@ void GameController::displayGamePlay()
     // Draw objects by depth (background to foreground)
     for (int depth = MAX_SPRITE_DEPTH; depth >= 0; --depth)
     {
-        for (auto it = graphObjects.begin(); it != graphObjects.end(); ++it)
+        for (auto obj : graphObjects)
         {
-            GraphObject* obj = *it;
-            if (m_spriteDepth[obj->getID()] == depth && obj->isVisible())
+            if (m_spriteDepth[obj->getID()] != depth || !obj->isVisible())
+                continue;
+            obj->animate();
+
+            double x, y;
+            obj->getAnimationLocation(x, y);
+
+            // Convert to screen coordinates
+            // Since sprite origin is at center, we need to position the center of the sprite
+            // at the center of each grid cell to avoid clipping
+            float screenX = static_cast<float>((x + 0.5) * SCALE_X);
+            float screenY = static_cast<float>((VIEW_HEIGHT - y - 0.5) * SCALE_Y + STATUS_TEXT_HEIGHT); // Flip Y axis properly and offset for status text
+
+            int imageID = obj->getID();
+            auto it = m_frameAdvanceInterval.find(imageID);
+            if (it != m_frameAdvanceInterval.end() && m_totalFramesDisplayed % it->second == 0)
+                obj->increaseAnimationNumber();
+            int frameNum = obj->getAnimationNumber() % getNumFrames(imageID);
+            int textureKey = imageID * TEXTURE_KEY_MULTIPLIER + frameNum;
+
+            auto textureIt = m_textures.find(textureKey);
+            if (textureIt == m_textures.end())
+                continue;
+
+            // Use cached sprite or create new one if not exists
+            sf::Sprite* sprite;
+            auto spriteIt = m_spriteCache.find(textureKey);
+            if (spriteIt != m_spriteCache.end())
             {
-                obj->animate();
-
-                double x, y;
-                obj->getAnimationLocation(x, y);
-
-                // Convert to screen coordinates
-                // Since sprite origin is at center, we need to position the center of the sprite
-                // at the center of each grid cell to avoid clipping
-                float screenX = static_cast<float>((x + 0.5) * SCALE_X);
-                float screenY = static_cast<float>((VIEW_HEIGHT - y - 0.5) * SCALE_Y + STATUS_TEXT_HEIGHT); // Flip Y axis properly and offset for status text
-
-                int imageID = obj->getID();
-                int frameNum = obj->getAnimationNumber() % getNumFrames(imageID);
-                int textureKey = imageID * TEXTURE_KEY_MULTIPLIER + frameNum;
-
-                auto textureIt = m_textures.find(textureKey);
-                if (textureIt != m_textures.end())
-                {
-                    // Use cached sprite or create new one if not exists
-                    sf::Sprite* sprite;
-                    auto spriteIt = m_spriteCache.find(textureKey);
-                    if (spriteIt != m_spriteCache.end())
-                    {
-                        sprite = spriteIt->second.get();
-                    }
-                    else
-                    {
-                        // Create new sprite and cache it
-                        auto newSprite = std::make_unique<sf::Sprite>(textureIt->second);
-                        sprite = newSprite.get();
-                        m_spriteCache[textureKey] = std::move(newSprite);
-                        
-                        // Get texture size for scaling calculations
-                        sf::Vector2u textureSize = textureIt->second.getSize();
-                        
-                        // Set origin to center for proper flipping
-                        sprite->setOrigin(sf::Vector2f(textureSize.x / 2.0f, textureSize.y / 2.0f));
-                    }
-                    
-                    // Update position and scale every frame (direction can change)
-                    sprite->setPosition(sf::Vector2f(screenX, screenY));
-                    
-                    // Calculate scale based on object size and coordinate system
-                    sf::Vector2u textureSize = sprite->getTexture().getSize();
-                    float scaleX = float(SCALE_X * obj->getSize() * SPRITE_WIDTH_GL) / textureSize.x;
-                    float scaleY = float(SCALE_Y * obj->getSize() * SPRITE_HEIGHT_GL) / textureSize.y;
-                    
-                    // Flip horizontally for left-facing sprites instead of rotating
-                    // Exclude doors since they have separate images for left and right orientations
-                    
-                    if (obj->getDirection() == GraphObject::left)
-                        scaleX = -scaleX;
-                    
-                    
-                    sprite->setScale(sf::Vector2f(scaleX, scaleY));
-
-                    m_window.draw(*sprite);
-                }
+                sprite = spriteIt->second.get();
             }
+            else
+            {
+                // Create new sprite and cache it
+                auto newSprite = std::make_unique<sf::Sprite>(textureIt->second);
+                sprite = newSprite.get();
+                m_spriteCache[textureKey] = std::move(newSprite);
+
+                // Get texture size for scaling calculations
+                sf::Vector2u textureSize = textureIt->second.getSize();
+
+                // Set origin to center for proper flipping
+                sprite->setOrigin(sf::Vector2f(textureSize.x / 2.0f, textureSize.y / 2.0f));
+            }
+
+            // Update position and scale every frame (direction can change)
+            sprite->setPosition(sf::Vector2f(screenX, screenY));
+
+            // Calculate scale based on object size and coordinate system
+            sf::Vector2u textureSize = sprite->getTexture().getSize();
+            float scaleX = float(SCALE_X * obj->getSize() * SPRITE_WIDTH_GL) / textureSize.x;
+            float scaleY = float(SCALE_Y * obj->getSize() * SPRITE_HEIGHT_GL) / textureSize.y;
+
+            // Flip horizontally for left-facing sprites instead of rotating
+
+            if (obj->getDirection() == GraphObject::left)
+                scaleX = -scaleX;
+
+
+            sprite->setScale(sf::Vector2f(scaleX, scaleY));
+
+            m_window.draw(*sprite);
         }
     }
 
@@ -607,13 +624,13 @@ void GameController::drawScoreAndLives(const string& text)
 
     // Start with default font size and dynamically adjust if text is too wide
     const int PADDING = 20; // Leave some padding on each side
-    const float MAX_TEXT_WIDTH = (WINDOW_WIDTH - (2 * PADDING));  
+    const float MAX_TEXT_WIDTH = (WINDOW_WIDTH - (2 * PADDING));
     int fontSize = 29;
     const int MIN_FONT_SIZE = 12; // Don't go below this size
-    
+
     sf::Text scoreText(m_font, text, fontSize);
     scoreText.setFillColor(sf::Color::White);
-    
+
     // Reduce font size if text is too wide
     sf::FloatRect textBounds = scoreText.getLocalBounds();
     while (textBounds.size.x > MAX_TEXT_WIDTH && fontSize > MIN_FONT_SIZE)
@@ -622,7 +639,7 @@ void GameController::drawScoreAndLives(const string& text)
         scoreText.setCharacterSize(fontSize);
         textBounds = scoreText.getLocalBounds();
     }
-    
+
     // Center the text horizontally
     scoreText.setPosition(sf::Vector2f((WINDOW_WIDTH - textBounds.size.x) / 2, 10));
 
@@ -653,4 +670,17 @@ int GameController::getNumFrames(int imageID)
             count++;
     }
     return max(1, count);
+}
+
+void GameController::reportLeakedGraphObjects() const
+{
+    set<GraphObject*>& graphObjects = GraphObject::getGraphObjects();
+    if (graphObjects.empty())
+        return;
+    cerr << "***** " << graphObjects.size() << " leaked objects:" << endl;
+    for (auto obj : graphObjects)
+    {
+        Coord coord = obj->getCoord();
+        cerr << m_imageNameMap.at(obj->getID()) << " at (" << coord.x << "," << coord.y << ")" << endl;
+    }
 }

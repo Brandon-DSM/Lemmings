@@ -12,12 +12,11 @@
 
 const int INVALID_KEY = 0;
 
-class GraphObject;
 class GameWorld;
 
 class GameController
 {
-  public:
+public:
 	void run(int argc, char* argv[], GameWorld* gw, std::string windowTitle);
 
 	bool getKeyIfAny(int& value)
@@ -48,27 +47,27 @@ class GameController
 
 	[[noreturn]] void quitGame();
 
-	  // Meyers singleton pattern
+	// Meyers singleton pattern
 	static GameController& getInstance()
 	{
 		static GameController instance;
 		return instance;
 	}
-	
+
 	~GameController() {
 		stopSounds();
 		m_soundBuffers.clear();
 	}
-	
+
 	// SFML-specific methods
 	sf::RenderWindow& getWindow() { return m_window; }
 	sf::Texture& getTexture(int imageID);
 	void loadTexture(int imageID, const std::string& filename);
 
 private:
-    enum GameControllerState : int;
+	enum GameControllerState : int;
 
-	GameWorld*	m_gw;
+	GameWorld* m_gw;
 	GameControllerState	m_gameState;
 	GameControllerState	m_nextStateAfterPrompt;
 	GameControllerState	m_nextStateAfterAnimate;
@@ -81,31 +80,36 @@ private:
 	std::string m_mainMessage;
 	std::string m_secondMessage;
 	int			m_curIntraFrameTick;
+	unsigned long m_totalFramesDisplayed;  // long enough for 16 months at 10ms/tick
 	using SoundMapType = std::map<int, std::string>;
 	using TextureMapType = std::map<int, sf::Texture>;
+	using ImageNameMapType = std::map<int, std::string>;
 	SoundMapType m_soundMap;
 	TextureMapType m_textures;
+	ImageNameMapType m_imageNameMap;
+	std::map<int, unsigned long> m_frameAdvanceInterval;
 	std::map<int, sf::SoundBuffer> m_soundBuffers;
 	bool		m_playerWon;
 	std::map<int, int> m_spriteDepth;
-	
+
 	// SFML objects
 	sf::RenderWindow m_window;
 	sf::Font m_font;
-	
+
 	// Sprite cache to avoid recreating sprites every frame
 	mutable std::map<int, std::unique_ptr<sf::Sprite>> m_spriteCache;
-	
+
 	// Active sounds to prevent immediate destruction
 	std::vector<std::unique_ptr<sf::Sound>> m_activeSounds;
 
-    void setGameState(GameControllerState s);
+	void setGameState(GameControllerState s);
 	void initDrawersAndSounds();
 	void initSpritesAndDepth();
 	void initSoundSystem();
 	void initFontSystem();
-    bool passesThruWhenSingleStepping(int key) const;
+	bool passesThruWhenSingleStepping(int key) const;
 	void displayGamePlay();
+	void reportLeakedGraphObjects() const;
 	void handleEvents();
 	void drawPrompt(const std::string& mainMessage, const std::string& secondMessage);
 	void drawScoreAndLives(const std::string& text);
